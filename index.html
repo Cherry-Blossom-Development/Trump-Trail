@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TRUMP TRAIL — 2026</title>
+<style>
+  html,body{margin:0;padding:0;background:#000;height:100%}
+  body{display:flex;justify-content:center}
+  #wrap{position:relative;background:#000;width:100%;max-width:640px;overflow:hidden}
+  #crt{padding:24px 16px;font-family:"Courier New",Courier,monospace;font-size:14px;
+       line-height:1.6;color:#33ff33;white-space:pre-wrap;min-height:100vh}
+  #scan{position:absolute;inset:0;pointer-events:none;
+        background:repeating-linear-gradient(180deg,
+          rgba(0,0,0,0.32) 0px,rgba(0,0,0,0.32) 1px,transparent 1px,transparent 3px)}
+  #crt button{display:block;width:100%;text-align:left;background:#000;
+       border:1px solid #33ff33;color:#33ff33;font-family:inherit;font-size:14px;
+       padding:8px 10px;margin-top:6px;border-radius:0;cursor:pointer}
+  #crt button:hover{background:#0a2a0a}
+  #crt button:focus-visible{outline:2px solid #33ff33;outline-offset:2px}
+  #cur{animation:bl 1s steps(2) infinite}
+  @keyframes bl{50%{opacity:0}}
+  @media (prefers-reduced-motion:reduce){#cur{animation:none}}
+</style>
+</head>
+<body>
+<div id="wrap"><div id="crt">BOOTING...</div><div id="scan"></div></div>
+<script>
+/* ---- EVENT TABLE -------------------------------------------------------
+   Add new months here. Each entry: title, description, two choices.
+   Effects are deltas applied to cash / health / food / morale (0-100).
+------------------------------------------------------------------------ */
+const EV = [
+ {t:"GROCERY RUN",d:"EGG PRICES HAVE TRIPLED SINCE SPRING.\nTHE CART TOTAL MAKES YOU FLINCH.",
+  a:{l:"BUY GROCERIES ANYWAY",e:{cash:-18,food:8,morale:-2}},
+  b:{l:"SKIP MEALS THIS WEEK",e:{cash:-4,food:-10,health:-6}}},
+ {t:"DOCTOR'S BILL",d:"YOU NEED A REFILL. THE CLINIC SAYS\nYOUR PLAN NO LONGER COVERS IT.",
+  a:{l:"PAY OUT OF POCKET",e:{cash:-25,health:8}},
+  b:{l:"RATION THE OLD PILLS",e:{health:-14,morale:-4}}},
+ {t:"LAYOFF NOTICE",d:"YOUR EMPLOYER CITES 'ECONOMIC\nUNCERTAINTY' AND CUTS YOUR DEPARTMENT.",
+  a:{l:"TAKE SEVERANCE, JOB HUNT",e:{cash:-10,morale:-8}},
+  b:{l:"PICK UP GIG WORK FAST",e:{cash:2,health:-6,morale:-6}}},
+ {t:"CHECKPOINT ON RTE 66",d:"AN ICE CHECKPOINT STOPS YOUR WAGON.\nYOUR COUSIN'S PAPERS ARE IN THE GLOVEBOX.",
+  a:{l:"STAY CALM, SHOW ID",e:{morale:-6,health:-4}},
+  b:{l:"TAKE THE BACK ROADS",e:{cash:-6,morale:-2}}},
+ {t:"CHICKEN DINNER",d:"A DEREGULATED POULTRY RECALL HITS THE\nNEWS THE DAY AFTER YOU COOKED IT.",
+  a:{l:"TOSS THE LEFTOVERS",e:{food:-10,cash:-6}},
+  b:{l:"EAT IT, IT'S PROBABLY FINE",e:{health:-16,morale:-2}}},
+ {t:"RENT HIKE",d:"YOUR LANDLORD CITES 'MARKET CONDITIONS'\nAND RAISES RENT 20 PERCENT OVERNIGHT.",
+  a:{l:"PAY IT, KEEP THE ROOF",e:{cash:-22}},
+  b:{l:"LOOK FOR A CHEAPER PLACE",e:{cash:-8,morale:-6,food:-4}}},
+ {t:"TOWN HALL",d:"A NEIGHBOR ORGANIZES A PROTEST ABOUT\nTARIFFS CRUSHING LOCAL SHOPS.",
+  a:{l:"JOIN IN",e:{morale:10,health:-3}},
+  b:{l:"STAY HOME, KEEP QUIET",e:{morale:-4}}},
+ {t:"GAS STATION LINE",d:"FUEL SPIKED OVERNIGHT. THE PUMP HAS A\nLINE AROUND THE BLOCK.",
+  a:{l:"WAIT IT OUT",e:{morale:-5,health:-2}},
+  b:{l:"PAY PREMIUM NEXT TOWN",e:{cash:-14}}},
+ {t:"RAID ON YOUR STREET",d:"A VAN PULLS UP TWO DOORS DOWN AT DAWN.\nTHE BLOCK GOES QUIET FOR DAYS.",
+  a:{l:"CHECK ON THE FAMILY AFTER",e:{morale:-8,health:-2}},
+  b:{l:"KEEP YOUR BLINDS SHUT",e:{morale:-10}}},
+ {t:"FOOD BANK LINE",d:"THE LINE WRAPS THE BLOCK. SNAP CUTS\nHIT LAST MONTH AND IT SHOWS.",
+  a:{l:"WAIT IT OUT",e:{food:10,morale:-3}},
+  b:{l:"SPEND CASH YOU DON'T HAVE",e:{cash:-12,food:8}}}
+];
+
+const MO = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+const EL = document.getElementById('crt');
+const W  = 38; // terminal rule width
+
+let s, m, log, screen, timer = null, pending = null;
+
+function init(){ s = {cash:60, health:60, food:60, morale:60}; m = 0; log = []; }
+init();
+screen = 'title';
+
+const cl = v => Math.max(0, Math.min(100, v));
+
+function bar(k, n){
+  const v = Math.round(s[k]), f = Math.round(v/10);
+  return n.padEnd(7) + "[" + "#".repeat(f) + ".".repeat(10-f) + "] " + String(v).padStart(3) + "\n";
+}
+function stats(){
+  return bar('cash','CASH') + bar('health','HEALTH') + bar('food','FOOD') + bar('morale','MORALE');
+}
+
+/* ---- TYPEWRITER --------------------------------------------------------
+   Types text out, then appends the cursor and choice buttons.
+   Clicking anywhere on the screen skips to the end.
+------------------------------------------------------------------------ */
+function finish(){
+  if (timer) { clearInterval(timer); timer = null; }
+  if (!pending) return;
+  EL.textContent = pending.text;
+  const c = document.createElement('span');
+  c.id = 'cur'; c.textContent = '_';
+  EL.appendChild(c);
+  pending.btns.forEach(b => {
+    const el = document.createElement('button');
+    el.textContent = '> ' + b.l;
+    el.onclick = b.fn;
+    EL.appendChild(el);
+  });
+  pending = null;
+}
+
+function type(text, btns){
+  if (timer) clearInterval(timer);
+  pending = { text, btns };
+  EL.textContent = '';
+  let i = 0;
+  timer = setInterval(() => {
+    i += 3;
+    if (i >= text.length) { finish(); return; }
+    EL.textContent = text.slice(0, i);
+  }, 12);
+}
+
+document.getElementById('wrap').addEventListener('click', e => {
+  if (e.target.tagName !== 'BUTTON') finish();
+});
+
+const HDR = "*** TRUMP TRAIL ***\nSURVIVE 12 MONTHS IN 'MURICA, 2026\n" + "=".repeat(W) + "\n\n";
+
+const TITLE =
+  "\n" +
+  "  TTTTT RRRR  U   U M   M PPPP\n" +
+  "    T   R   R U   U MM MM P   P\n" +
+  "    T   RRRR  U   U M M M PPPP\n" +
+  "    T   R  R  U   U M   M P\n" +
+  "    T   R   R  UUU  M   M P\n\n" +
+  "      T R A I L   -   2026\n\n" +
+  "=".repeat(W) + "\n\n" +
+  "A GAME OF ATTRITION.\n\n" +
+  "YOU BEGIN IN JANUARY WITH CASH, HEALTH,\nFOOD AND MORALE. TWELVE MONTHS STAND\nBETWEEN YOU AND THE OTHER SIDE.\n\n" +
+  "IF ANY GAUGE HITS ZERO, THE WAGON STOPS.\n\n" +
+  "(C) 1978 AMERICAN OUTCOMES CORP\n\n";
+
+function render(){
+  if (screen === 'title'){
+    type(TITLE, [{ l:"PRESS ANY KEY TO BEGIN", fn: () => { screen = 'play'; render(); } }]);
+    return;
+  }
+
+  const dead = s.cash <= 0 || s.health <= 0 || s.food <= 0 || s.morale <= 0;
+
+  if (dead){
+    type(HDR + "YOU DID NOT MAKE IT.\n\nYOU RAN OUT IN " + MO[m % 12] +
+         ". THE WAGON STOPS\nHERE.\n\n",
+      [{ l:"PRESS TO START OVER", fn: () => { init(); screen = 'title'; render(); } }]);
+    return;
+  }
+
+  if (m >= 12){
+    type(HDR + "YOU SURVIVED ALL 12 MONTHS.\n\n" + stats() +
+         "\nBATTERED, BUT STILL HERE.\n\n",
+      [{ l:"PRESS TO PLAY AGAIN", fn: () => { init(); screen = 'title'; render(); } }]);
+    return;
+  }
+
+  const e = log[m] || (log[m] = EV[Math.floor(Math.random() * EV.length)]);
+  type(HDR + "MONTH " + (m+1) + "/12 - " + MO[m] + " 2026\n\n" + stats() +
+       "\n" + "-".repeat(W) + "\n" + e.t + "\n" + e.d + "\n" + "-".repeat(W) +
+       "\n\nWHAT DO YOU DO?",
+    [{ l:"1. " + e.a.l, fn: () => pick('a') },
+     { l:"2. " + e.b.l, fn: () => pick('b') }]);
+}
+
+function pick(o){
+  const f = log[m][o].e;
+  for (const k in f) s[k] = cl(s[k] + f[k]);
+  m++;
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
